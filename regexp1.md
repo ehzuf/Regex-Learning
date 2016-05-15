@@ -1,5 +1,9 @@
 # 正则表达式可以既简单又快速
 
+Author: Russ Cox
+Translator: Zhe Fu
+Source: https://swtch.com/~rsc/regexp/regexp1.html
+
 ## 引言
 
 一般地，正则表达式匹配有两种实现方式。一种应用于许多语言中，例如Perl等；另一种应用地方较少，最著名的是awk和grep。两种方法的性能特征差异很大。
@@ -109,4 +113,252 @@ e<sub>1</sub>+的NFA同样创造了一个环，但是需要经过e至少一次�
 
 在第1步和第2步，NFA同时在两个状态中。只有第三步状态集缩减到一个。多状态方法同时尝试多个路径，只需读入输入字符一次。在最坏情况下，NFA每一步都可能在所有状态中，但是这种结果最差导致常数倍的工作量，与输入字符长度无关。所以任意大的输入字符能够在线性时间内处理。相对于回溯法的指数级别的时间要求，这是一个巨大的改进。这种改进来自于仅仅追踪可到达的状态，而非哪一条路径通向了这个状态。**对于有n个节点的NFA，每一步最多有n个可以到达的状态，但是可能有2<sup>n</sup>条路径**。
 
+
+## 实现
+
+Thompson在他1968年的paper中介绍了多状态模拟方法。在他的描述中，NFA的状态由小的机器码序列表示，用函数调用指令序列表示可能状态的列表。本质上，Thompson将正则表达式编译成聪明的机器码。40年后，计算机速度快得多，因此机器码方法已经不是必要的了。下一部分介绍的实现由可移植的标准C语言实现。所有源代码（小于400行）和评测脚本可以在这里获得。（对C语言或者指针不熟悉的读者可以仅仅阅读描述，跳过实际的代码）
+
+## 实现：编译成NFA
+
+第一步是将正则表达式编译成等价的NFA。在我们的C程序中，我们可以将NFA表示成链接的状态（State）结构集合。
+
+```
+struct State
+{
+	int c;
+	State *out;
+	State *out1;
+	int lastlist;
+};
+```
+
+每一个State根据c的值的不同，表示下列NFA片段的一个。
+
+![](https://swtch.com/~rsc/regexp/fig13.png)
+
+（在执行过程中，Lastlist会被使用，这将在下一个部分介绍）
+
+根据Thompson的paper，编译器从用后缀注释的形式表示的正则表达式构建NFA，这些后缀注释是"."，表示连接。一个单独的函数re2post将诸如`a(bb)+a`形式的中缀形式正则表达式改写成等价的后缀表现形式`abb.+.a.`。（真实实现中，"."当然表示任意字符，而不是连接符。真实实现同样可能在解析正则表达式过程中构建NFA，而不是转化成明确的后缀形式的正则表达式。然而，后缀形式版本更方便，也与Thompson的paper更加紧密。）
+
+当编译器扫描后缀形式的表达式时，它维护着一个由计算过的NFA片段组成的栈。字符使NFA片段入栈，操作符使NFA片段出栈。例如，当编译`abb.+.a.`中的`abb`时，栈中包含有NFA片段a，b，和b。"."的编译使两个NFA片段b出栈，并将NFA片段"bb."入栈。每一个NFA片段由它的起始状态以及外出箭头所组成：
+
+```
+struct Frag
+{
+	State *start;
+	Ptrlist *out;
+};
+```
+
+Start指针指向NFA片段的启示状态，out是指向没有连接任何东西的State*指针的指针列表。他们既是NFA片段中孤立的箭头。
+
+一些操作指针列表的辅助功能函数：
+
+
+```
+Ptrlist *list1(State **outp);
+Ptrlist *append(Ptrlist *l1, Ptrlist *l2);
+
+void patch(Ptrlist *l, State *s);
+```
+
+List1创造了一个新的指针列表，包含单指针outp。Append连接了两个指针列表，返回结果。Patch将指针列表l中的孤立箭头指向状态s：对于l中的每一个指针outp，使*outp=s。
+
+考虑到这些基本单元以及片段栈，编译器实际上是一个在后缀形式正则表达式上的简单循环。最后留下一个片段：补充填上一个匹配状态，完成了整个NFA。
+
+
+```
+State*
+post2nfa(char *postfix)
+{
+	char *p;
+	Frag stack[1000], *stackp, e1, e2, e;
+	State *s;
+
+	#define push(s) *stackp++ = s
+	#define pop()   *--stackp
+
+	stackp = stack;
+	for(p=postfix; *p; p++){
+		switch(*p){
+		/* compilation cases, described below */
+		}
+	}
+	
+	e = pop();
+	patch(e.out, matchstate);
+	return e.start;
+}
+```
+
+对应于之前介绍了各个翻译步骤，相应的编译代码如下。
+
+文字字符：
+
+![](https://swtch.com/~rsc/regexp/fig14.png)
+
+```
+default:
+	s = state(*p, NULL, NULL);
+	push(frag(s, list1(&s->out));
+	break;
+```
+
+串接：
+
+![](https://swtch.com/~rsc/regexp/fig15.png)
+
+```
+case '.':
+	e2 = pop();
+	e1 = pop();
+	patch(e1.out, e2.start);
+	push(frag(e1.start, e2.out));
+	break;
+```
+
+并接：
+![](https://swtch.com/~rsc/regexp/fig16.png)
+
+```
+case '|':
+	e2 = pop();
+	e1 = pop();
+	s = state(Split, e1.start, e2.start);
+	push(frag(s, append(e1.out, e2.out)));
+	break;
+```
+
+零或一：
+![](https://swtch.com/~rsc/regexp/fig17.png)
+
+```
+case '?':
+	e = pop();
+	s = state(Split, e.start, NULL);
+	push(frag(s, append(e.out, list1(&s->out1))));
+	break;
+```
+
+零或者更多：
+![](https://swtch.com/~rsc/regexp/fig18.png)
+
+```
+case '?':
+	e = pop();
+	s = state(Split, e.start, NULL);
+	push(frag(s, append(e.out, list1(&s->out1))));
+	break;
+```
+
+一个或者更多：
+![](https://swtch.com/~rsc/regexp/fig19.png)
+
+```
+case '+':
+	e = pop();
+	s = state(Split, e.start, NULL);
+	patch(e.out, s);
+	push(frag(e.start, list1(&s->out1)));
+	break;
+```
+
+## 实现：模拟NFA
+
+现在NFA已经构建完毕了，我们需要模拟（simulate）之。模拟需要追踪状态（State）集合，可以用简单的数组列表存储。
+
+```
+struct List
+{
+	State **s;
+	int n;
+};
+```
+
+模拟过程使用两个列表：clist是当前NFA所在的状态的集合，nlist是处理完当前字符后，NFA将在的状态的集合。执行的循环中，首先初始化clist，使之仅包含开始状态，然后每次运转自动机一步。
+
+```
+int
+match(State *start, char *s)
+{
+	List *clist, *nlist, *t;
+
+	/* l1 and l2 are preallocated globals */
+	clist = startlist(start, &l1);
+	nlist = &l2;
+	for(; *s; s++){
+		step(clist, *s, nlist);
+		t = clist; clist = nlist; nlist = t;	/* swap clist, nlist */
+	}
+	return ismatch(clist);
+}
+```
+
+为了避免每一次都需要分配内存，match函数使用两个提前分配好的列表了l1和l2作为clist和nlist，每一步之后交换两者。
+
+如果最终状态集合包括匹配状态，那么字符串就匹配了。
+
+```
+int
+ismatch(List *l)
+{
+	int i;
+
+	for(i=0; i<l->n; i++)
+		if(l->s[i] == matchstate)
+			return 1;
+	return 0;
+}
+```
+
+Addstate向一个列表中添加一个状态，但是如果此列表中已经有了就不添加。每次add操作扫描整个列表是很低效的，因此，我们用变量listid作为列表产生数。当addstate向列表中添加一个状态，它在`s->lastlist`中记录`listid`。如果两者已经相同，那么s已经在列表中了。addstate同样与没有标签的箭头相关：如果s是Split状态，有两个没有标签的箭头指向新状态，那么addstate将这些状态加入列表中，而不是s。
+
+```
+void
+addstate(List *l, State *s)
+{
+	if(s == NULL || s->lastlist == listid)
+		return;
+	s->lastlist = listid;
+	if(s->c == Split){
+		/* follow unlabeled arrows */
+		addstate(l, s->out);
+		addstate(l, s->out1);
+		return;
+	}
+	l->s[l->n++] = s;
+}
+```
+
+Startlist创造了初始状态列表，仅仅加入起始状态。
+
+```
+List*
+startlist(State *s, List *l)
+{
+	listid++;
+	l->n = 0;
+	addstate(l, s);
+	return l;
+}
+```
+
+最后，对于每一个输入字符，step将NFA前进一步，用当前状态列表clist计算下一个列表nlist。
+
+```
+void
+step(List *clist, int c, List *nlist)
+{
+	int i;
+	State *s;
+
+	listid++;
+	nlist->n = 0;
+	for(i=0; i<clist->n; i++){
+		s = clist->s[i];
+		if(s->c == c)
+			addstate(nlist, s->out);
+	}
+}
+```
 
