@@ -386,4 +386,121 @@ step(List *clist, int c, List *nlist)
 
 ## 缓存NFA构造DFA
 
+注意到，DFA的执行过程要比NFA更有效，因为DFA在任意时刻只会有一个状态激活：从来不会有多个下一状态的选择问题。**任何NFA都能转化成等价的DFA**，其中DFA的状态对应于NFA的一组状态。
+
+例如，下图是正则表达式`abab|abbb`对应的NFA，加上了状态序号：
+
+![](https://swtch.com/~rsc/regexp/fig20.png)
+
+等价的DFA如下：
+
+![](https://swtch.com/~rsc/regexp/fig21.png)
+
+DFA中的每一个状态对应于NFA中的一组状态。
+
+某种意义上，Thompson的NFA模拟方法就是在执行等价的DFA：每一个列表对应于一些DFA状态，step函数根据给定的列表以及下一个字符，计算下一个进入的DFA状态。Thompson的方法用过重新构建所需要的DFA的状态来实现DFA的模拟。为了避免将来可能的重复计算，我们可以计算必要的等价DFA，缓存与空闲的内存中。本章将介绍和实现这样一种方法。从上一部分的NFA实现开始，我们需要添加少于100行代码来构建DFA实现。
+
+为了实现DFA缓存，我们首先介绍一个新的用来表示DFA状态的数据类型：
+
+```
+struct DState
+{
+	List l;
+	DState *next[256];
+	DState *left;
+	DState *right;
+};
+```
+
+DState是状态列表l的缓存拷贝。next数组包含对于每一个可能的输入指向下一个状态的指针：如果当前状态是d，下一个输入是c，那么d->next[c]就是下一个状态。如果d->next[c]是空，说明下一个状态还未完成。对于一个给定的状态和输入字符，Nextstate计算、记录并返回下一个状态。
+
+正则表达式匹配不断重复d->next[c]，在需要的时候调用nextstate计算新状态。
+
+
+```
+int
+match(DState *start, char *s)
+{
+	int c;
+	DState *d, *next;
+	
+	d = start;
+	for(; *s; s++){
+		c = *s & 0xFF;
+		if((next = d->next[c]) == NULL)
+			next = nextstate(d, c);
+		d = next;
+	}
+	return ismatch(&d->l);
+}
+```
+
+所有已经计算过的DStates被存储在一个可以让我们通过它的List查询DState的结构中。为了实现这样的目的，我们将他们排列入一个二叉树，用排序好的List作为key。对于给定的List，dstate函数返回DState，如果必要的话分配一个。
+
+
+```
+DState*
+dstate(List *l)
+{
+	int i;
+	DState **dp, *d;
+	static DState *alldstates;
+
+	qsort(l->s, l->n, sizeof l->s[0], ptrcmp);
+
+	/* look in tree for existing DState */
+	dp = &alldstates;
+	while((d = *dp) != NULL){
+		i = listcmp(l, &d->l);
+		if(i < 0)
+			dp = &d->left;
+		else if(i > 0)
+			dp = &d->right;
+		else
+			return d;
+	}
+	
+	/* allocate, initialize new DState */
+	d = malloc(sizeof *d + l->n*sizeof l->s[0]);
+	memset(d, 0, sizeof *d);
+	d->l.s = (State**)(d+1);
+	memmove(d->l.s, l->s, l->n*sizeof l->s[0]);
+	d->l.n = l->n;
+
+	/* insert in tree */
+	*dp = d;
+	return d;
+}
+```
+
+Nextstate运行NFA的step函数，返回相对应的DState：
+
+```
+DState*
+nextstate(DState *d, int c)
+{
+	step(&d->l, c, &l1);
+	return d->next[c] = dstate(&l1);
+}
+```
+
+最后，DFA的起始状态对应NFA的起始状态列表：
+
+
+```
+DState*
+startdstate(State *start)
+{
+	return dstate(startlist(start, &l1));
+}
+```
+
+（在NFA模拟中，l1是提前分配的List）
+
+DStates对应于DFA的状态，但是DFA只有在需要的时候才会构建：如果一个DFA状态没有在搜索过程中遇到，那么它就不会在缓存中存在。另外一种方法是一次性计算整个DFA。这样可以使匹配更快一点儿，通过移除可能的分支，但是代价是启动时间以及内存大小的增加。
+
+有人可能会担心实时构建DFA所带来的内存边界问题。由于DState只是step函数的缓存，如果缓存增长过大，dstate的实现可以选择丢弃目前的整个DFA。这种缓存替换策略仅仅需要在dstate和nextstate中增加几行代码，另外加上大约50行的内存管理代码。实现可以在[这里](http://swtch.com/~rsc/regexp/)获得。([Awk](http://cm.bell-labs.com/cm/cs/awkbook/)使用了相似的缓存大小限制策略，固定限制32个缓存状态，这也可以解释性能图中当n=28时曲线的不连续。）
+
+
+从正则表达式得到的NFA展现出了良好的局部性：在绝大部分文本上，它们一直访问同样的状态，进行同样的跳转。这就使得缓存很有价值：当箭头第一册被访问时，NFA模拟中的下一个状态必须被计算，但是之后的转移仅仅是一次内存访问。真实实现中基于DFA的方法可以利用额外的优化使得运行得更快。一篇相关的文章（还没有写出）将更详细地探索基于DFA的正则表达式匹配实现方法。
 
