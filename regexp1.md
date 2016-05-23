@@ -553,5 +553,5 @@ Thompson的正则表达式实现是为了在IBM 7094运行的操作系统CTSS[10
 
 Thompson的论文标志着正则表达式历史的开端。Thompson在Unix第一版（1971）的ed编辑器，或者之后在Unix第四版（1973）的grep中，并没有选择他的算法。相反，这些古老的Unix工具采用了回溯递归的方法。回溯法是合理的，因为当时的正则表达式语法相当有限：它忽略了分组括号和`|``?``+`操作符。Al Aho的egrep，第一次在Unix第七版（1979）出现，是第一个支持完整正则表达式语法的Unix工具，采用了提前计算的DFA。到了第八版（1985），egrep采用了在线计算的方式，正如之前给出的实验一样。
 
-1980年代早期，Rob Pike在写sam[6]文本编辑器时写了新的正则表达式匹配实现，Dave Presotto将其抽取出来，放入Unix第八版中。Pike的实现用NFA模拟有效地实现了字串匹配，但是正如第八本源代码剩余的那样，并没有被广泛地分发。Pike自己也没有认识到他的技术有任何新颖的地方。Henry Spencer从头重新实现了第八版库，但是使用了回溯的方法，并[公开了他的实现](http://arglist.com/regex/)。
+1980年代早期，Rob Pike在写sam[6]文本编辑器时写了新的正则表达式匹配实现，Dave Presotto将其抽取出来，放入Unix第八版中。Pike的实现用NFA模拟有效地实现了字串匹配，但是正如第八本源代码剩余的那样，并没有被广泛地分发。Pike自己也没有认识到他的技术有任何新颖的地方。Henry Spencer从头重新实现了第八版库，但是使用了回溯的方法，并[公开了他的实现](http://arglist.com/regex/)。它被广泛使用，最终成为了之前提到的慢的正则表达式实现（Perl，PCRE，Python等等）的基础。（在他的辩解中，Spencer知道该方法可能比较慢，而且他不知道更有效的方法的存在。他甚至在文档中做出了警告，“许多用户发现速度是足够的，尽管讲egrep的内部代码改成这种方法的代码可能是一种错误。”）Pike的正则表达式实现扩展到支持Unicode，在[1992年晚期](http://groups.google.com/group/comp.os.research/msg/f1783504a2d18051)的sam中可以得到，但是更有效的正则表达式搜索算法变得无人注意的。这份代码目前可以在许多论坛中拿到：[sam的一部分](http://plan9.bell-labs.com/sources/plan9/sys/src/cmd/sam/)，[Plan 9正则表达式库](http://plan9.bell-labs.com/sources/plan9/sys/src/libregexp/)，或者是[Unix单独包](http://swtch.com/plan9port/unix/)。Ville Laurikari在1999年独立发现了Pike的算法，同样发展形成了理论基础[2]。
 
