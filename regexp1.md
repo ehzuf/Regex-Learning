@@ -555,3 +555,38 @@ Thompson的论文标志着正则表达式历史的开端。Thompson在Unix第一
 
 1980年代早期，Rob Pike在写sam[6]文本编辑器时写了新的正则表达式匹配实现，Dave Presotto将其抽取出来，放入Unix第八版中。Pike的实现用NFA模拟有效地实现了字串匹配，但是正如第八本源代码剩余的那样，并没有被广泛地分发。Pike自己也没有认识到他的技术有任何新颖的地方。Henry Spencer从头重新实现了第八版库，但是使用了回溯的方法，并[公开了他的实现](http://arglist.com/regex/)。它被广泛使用，最终成为了之前提到的慢的正则表达式实现（Perl，PCRE，Python等等）的基础。（在他的辩解中，Spencer知道该方法可能比较慢，而且他不知道更有效的方法的存在。他甚至在文档中做出了警告，“许多用户发现速度是足够的，尽管讲egrep的内部代码改成这种方法的代码可能是一种错误。”）Pike的正则表达式实现扩展到支持Unicode，在[1992年晚期](http://groups.google.com/group/comp.os.research/msg/f1783504a2d18051)的sam中可以得到，但是更有效的正则表达式搜索算法变得无人注意的。这份代码目前可以在许多论坛中拿到：[sam的一部分](http://plan9.bell-labs.com/sources/plan9/sys/src/cmd/sam/)，[Plan 9正则表达式库](http://plan9.bell-labs.com/sources/plan9/sys/src/libregexp/)，或者是[Unix单独包](http://swtch.com/plan9port/unix/)。Ville Laurikari在1999年独立发现了Pike的算法，同样发展形成了理论基础[2]。
 
+最后，如果不提到Jeffrey Friedl的著作*掌握正则表达式（Mastering Regular Expressions）*，也许是当今程序员最著名的参考，那么关于正则表达式的讨论就是不完整的。Friedl的书如何最好地**使用**目前的正则表达式匹配实现，但是没有讲如何最好地**实现**正则表达式匹配。与实现相关的一丁点文字使得人们普遍认为递归回溯是模拟NFA的唯一途径。Friedl使这一点很清楚：他[既不懂也不尊重](http://regex.info/blog/2006-09-15/248)背后的理论。
+
+## 总结
+
+使用已经知道数十年的基于有限自动机的方法，正则表达式匹配可以既简单又快速。相反，Perl，PCRE，Python，Ruby，Java，以及许多其他语言基于回溯递归的方法实现正则表达式匹配，这种方法简单，但是可能难以忍受的慢。除了反向引用外，基于缓慢的回溯方法的实现的正则表达式功能都可以被基于自动机的方法提供，并且速度适中如一的快。
+
+这个系列的下一篇文章，”[正则表达式匹配：虚拟机方法](https://swtch.com/~rsc/regexp/regexp2.html)“，讨论了基于NFA方法的子串抽取。第三篇文章，”[自然环境中的正则表达式匹配](https://swtch.com/~rsc/regexp/regexp3.html)“，检查了正则表达式的生产实现。第四篇文章，”[带有卦索引的正则表达式匹配](https://swtch.com/~rsc/regexp/regexp4.html)“，解释了Google代码搜索是如何实现的。
+
+
+## 致谢
+
+Lee Feigenbaum, James Grimmelmann, Alex Healy, William Josephson, and Arnold Robbins read drafts of this article and made many helpful suggestions. Rob Pike clarified some of the history surrounding his regular expression implementation. Thanks to all.
+
+## 引用
+
+[1] L. Peter Deutsch and Butler Lampson, “An online editor,” Communications of the ACM 10(12) (December 1967), pp. 793–799. http://doi.acm.org/10.1145/363848.363863
+
+[2] Ville Laurikari, “NFAs with Tagged Transitions, their Conversion to Deterministic Automata and Application to Regular Expressions,” in Proceedings of the Symposium on String Processing and Information Retrieval, September 2000. http://laurikari.net/ville/spire2000-tnfa.ps
+
+[3] M. Douglas McIlroy, “Enumerating the strings of regular languages,” Journal of Functional Programming 14 (2004), pp. 503–518. http://www.cs.dartmouth.edu/~doug/nfa.ps.gz (preprint)
+
+[4] R. McNaughton and H. Yamada, “Regular expressions and state graphs for automata,” IRE Transactions on Electronic Computers EC-9(1) (March 1960), pp. 39–47.
+
+[5] Paul Pierce, “CTSS source listings.” http://www.piercefuller.com/library/ctss.html (Thompson's QED is in the file com5 in the source listings archive and is marked as 0QED)
+
+[6] Rob Pike, “The text editor sam,” Software—Practice & Experience 17(11) (November 1987), pp. 813–845. http://plan9.bell-labs.com/sys/doc/sam/sam.html
+
+[7] Michael Rabin and Dana Scott, “Finite automata and their decision problems,” IBM Journal of Research and Development 3 (1959), pp. 114–125. http://www.research.ibm.com/journal/rd/032/ibmrd0302C.pdf
+
+[8] Dennis Ritchie, “An incomplete history of the QED text editor.” http://plan9.bell-labs.com/~dmr/qed.html
+
+[9] Ken Thompson, “Regular expression search algorithm,” Communications of the ACM 11(6) (June 1968), pp. 419–422. http://doi.acm.org/10.1145/363347.363387 (PDF)
+
+[10] Tom Van Vleck, “The IBM 7094 and CTSS.” http://www.multicians.org/thvv/7094.html
+
