@@ -246,7 +246,7 @@ case '?':
 ![](https://swtch.com/~rsc/regexp/fig18.png)
 
 ```
-case '?':
+case '*':
 	e = pop();
 	s = state(Split, e.start, NULL);
 	push(frag(s, append(e.out, list1(&s->out1))));
